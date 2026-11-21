@@ -39,6 +39,33 @@ button{border:0;background:#166534;color:white;font-weight:bold}
 <button onclick="addItem()">إضافة الصنف</button>
 </div>
 <div class="card">
+
+<div class="card">
+<h3>إدارة بيانات المخزون</h3>
+
+<button type="button" onclick="document.getElementById('excelFile').click()">
+📥 استيراد بيانات Excel
+</button>
+
+<input type="file" id="excelFile" accept=".xlsx,.xls" hidden onchange="importExcel(event)">
+
+<button type="button" onclick="exportExcel()">
+📤 تصدير المخزون إلى Excel
+</button>
+
+<button type="button" onclick="backupData()">
+💾 حفظ نسخة احتياطية
+</button>
+
+<button type="button" onclick="document.getElementById('backupFile').click()">
+📂 استعادة نسخة احتياطية
+</button>
+
+<input type="file" id="backupFile" accept=".json" hidden onchange="restoreBackup(event)">
+
+<p>الحفظ التلقائي مفعل بعد كل عملية.</p>
+</div>
+  
 <h3>بحث عن صنف</h3>
 <input id="search" placeholder="اكتب اسم الصنف أو الباركود" oninput="showItems()">
 <h3>الأصناف المسجلة</h3>
