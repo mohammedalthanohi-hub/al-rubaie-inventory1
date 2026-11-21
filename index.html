@@ -74,7 +74,18 @@ button{border:0;background:#166534;color:white;font-weight:bold}
 </main>
 <script>
 let stock=JSON.parse(localStorage.getItem('stock')||'[]');
-function save(){localStorage.setItem('stock',JSON.stringify(stock));showItems()}
+
+function save(){
+  localStorage.setItem('stock', JSON.stringify(stock));
+  localStorage.setItem('stock_last_saved', new Date().toISOString());
+  showItems();
+}
+
+function manualSave(){
+  save();
+  alert("تم حفظ جميع بيانات المخزون بنجاح");
+}
+
 function addItem(){
 let barcode=document.getElementById('barcode').value.trim();
 let name=document.getElementById('name').value.trim();
