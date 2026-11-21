@@ -1,0 +1,12 @@
+
+{
+  "name": "الربيعي ماركت - نظام الجرد",
+  "short_name": "جرد الربيعي",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f1f5f1",
+  "theme_color": "#14532d",
+  "orientation": "portrait",
+  "lang": "ar",
+  "dir": "rtl"
+}
