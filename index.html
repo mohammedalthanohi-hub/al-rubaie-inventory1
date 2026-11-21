@@ -28,7 +28,11 @@ button{border:0;background:#166534;color:white;font-weight:bold}
 <main>
 <div class="card">
 <h3>إضافة صنف جديد</h3>
+
 <input id="barcode" placeholder="رقم الباركود">
+<button type="button" onclick="startScanner()">📷 مسح الباركود بالكاميرا</button>
+<div id="reader" style="width:100%;margin-top:10px"></div>
+<button type="button" class="small" onclick="stopScanner()">إغلاق الكاميرا</button>
 <input id="name" placeholder="اسم الصنف">
 <input id="qty" type="number" placeholder="الكمية">
 <input id="price" type="number" placeholder="سعر الشراء">
