@@ -66,7 +66,43 @@ document.getElementById('items').innerHTML=filtered.map((x,i)=>`<div class="item
 }
 function delItem(i){if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);save()}}
 showItems();
-</script>
+
+let scanner = null;
+
+async function startScanner() {
+  if (typeof Html5Qrcode === "undefined") {
+    alert("تعذر تحميل قارئ الباركود. تحقق من اتصال الإنترنت.");
+    return;
+  }
+
+  try {
+    if (!scanner) {
+      scanner = new Html5Qrcode("reader");
+    }
+
+    await scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 150 } },
+      async (decodedText) => {
+        document.getElementById("barcode").value = decodedText;
+        await stopScanner();
+        alert("تمت قراءة الباركود: " + decodedText);
+      },
+      () => {}
+    );
+  } catch (error) {
+    alert("تعذر تشغيل الكاميرا: " + error);
+  }
+}
+
+async function stopScanner() {
+  if (scanner && scanner.isScanning) {
+    await scanner.stop();
+    scanner.clear();
+    scanner = null;
+  }
+}
+  </script>
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
