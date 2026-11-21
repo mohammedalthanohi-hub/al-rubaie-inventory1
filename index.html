@@ -1,0 +1,65 @@
+
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14532d">
+<title>جرد الربيعي ماركت</title>
+<style>
+body{font-family:Arial;background:#f1f5f1;margin:0;color:#222}
+header{background:#14532d;color:white;padding:20px;text-align:center}
+main{padding:15px;max-width:650px;margin:auto}
+.card{background:white;padding:15px;border-radius:12px;margin:12px 0}
+input,button{box-sizing:border-box;width:100%;padding:13px;margin:6px 0;border-radius:8px;font-size:16px}
+input{border:1px solid #bbb}
+button{border:0;background:#166534;color:white;font-weight:bold}
+.item{border-bottom:1px solid #ddd;padding:12px}
+.small{background:#475569}
+</style>
+</head>
+<body>
+<header>
+<h2>الربيعي ماركت</h2>
+<p>نظام إدارة وجرد المخزون</p>
+</header>
+<main>
+<div class="card">
+<h3>إضافة صنف جديد</h3>
+<input id="barcode" placeholder="رقم الباركود">
+<input id="name" placeholder="اسم الصنف">
+<input id="qty" type="number" placeholder="الكمية">
+<input id="price" type="number" placeholder="سعر الشراء">
+<button onclick="addItem()">إضافة الصنف</button>
+</div>
+<div class="card">
+<h3>بحث عن صنف</h3>
+<input id="search" placeholder="اكتب اسم الصنف أو الباركود" oninput="showItems()">
+<h3>الأصناف المسجلة</h3>
+<div id="items"></div>
+</div>
+</main>
+<script>
+let stock=JSON.parse(localStorage.getItem('stock')||'[]');
+function save(){localStorage.setItem('stock',JSON.stringify(stock));showItems()}
+function addItem(){
+let barcode=document.getElementById('barcode').value.trim();
+let name=document.getElementById('name').value.trim();
+let qty=Number(document.getElementById('qty').value);
+let price=Number(document.getElementById('price').value);
+if(!name){alert('أدخل اسم الصنف');return}
+stock.push({barcode,name,qty,price});
+save();
+['barcode','name','qty','price'].forEach(id=>document.getElementById(id).value='');
+alert('تمت إضافة الصنف');
+}
+function showItems(){
+let q=document.getElementById('search').value.toLowerCase();
+let filtered=stock.filter(x=>x.name.toLowerCase().includes(q)||x.barcode.includes(q));
+document.getElementById('items').innerHTML=filtered.map((x,i)=>`<div class="item"><b>${x.name}</b><br>الباركود: ${x.barcode||'-'}<br>الكمية: ${x.qty}<br>سعر الشراء: ${x.price}<br><button class="small" onclick="delItem(${stock.indexOf(x)})">حذف</button></div>`).join('');
+}
+function delItem(i){if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);save()}}
+showItems();
+</script>
+</body>
+</html>
