@@ -63,5 +63,13 @@ document.getElementById('items').innerHTML=filtered.map((x,i)=>`<div class="item
 function delItem(i){if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);save()}}
 showItems();
 </script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js")
+      .catch(error => console.error("SW error:", error));
+  });
+}
+</script>
 </body>
 </html>
