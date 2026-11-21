@@ -4,11 +4,12 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "mkdir -p www && cp index.html manifest.json sw.js www/"
+    "build": "mkdir -p www && cp index.html manifest.json sw.js www/ && cp node_modules/xlsx/dist/xlsx.full.min.js www/"
   },
   "dependencies": {
     "@capacitor/core": "^7.4.3",
-    "@capacitor/android": "^7.4.3"
+    "@capacitor/android": "^7.4.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3"
