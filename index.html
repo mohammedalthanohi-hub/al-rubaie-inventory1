@@ -198,7 +198,7 @@ function importExcel(event) {
           return key ? row[key] : "";
         };
 
-        const name = String(find(["الصنف","اسم الصنف","name"])).trim();
+        const name = String(find(["الصنف","اسمالصنف","name"])).trim();
         const barcode = String(find(["رقمالباركود","الباركود","barcode"])).trim();
         const qty = Number(find(["العدد","الكمية","qty"]));
         const price = Number(find(["سعرالشراء","سعرالشراءللوحدة","price"]));
