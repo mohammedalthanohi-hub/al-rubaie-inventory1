@@ -139,6 +139,165 @@ if ("serviceWorker" in navigator) {
 }
 <script src="./xlsx.full.min.js"></script>
 <script src="https://unpkg.com/html5-qrcode"></script>
+
+// تصدير المخزون إلى Excel
+function exportExcel() {
+  if (typeof XLSX === "undefined") {
+    alert("مكتبة Excel غير جاهزة");
+    return;
+  }
+
+  const data = stock.map(x => ({
+    "الصنف": x.name,
+    "رقم الباركود": x.barcode,
+    "العدد": x.qty,
+    "سعر الشراء": x.price
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "المخزون");
+  XLSX.writeFile(wb, "مخزون_الربيعي_ماركت.xlsx");
+}
+
+// استيراد Excel
+function importExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  if (typeof XLSX === "undefined") {
+    alert("مكتبة Excel غير جاهزة");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const wb = XLSX.read(e.target.result, {type:"array"});
+      const rows = XLSX.utils.sheet_to_json(
+        wb.Sheets[wb.SheetNames[0]],
+        {defval:""}
+      );
+
+      if (!rows.length) {
+        alert("ملف Excel فارغ");
+        return;
+      }
+
+      const normalize = s => String(s).replace(/\s/g,"").toLowerCase();
+
+      let added = 0;
+      let updated = 0;
+      let skipped = 0;
+
+      rows.forEach(row => {
+        const keys = Object.keys(row);
+        const find = names => {
+          const key = keys.find(k => names.includes(normalize(k)));
+          return key ? row[key] : "";
+        };
+
+        const name = String(find(["الصنف","اسم الصنف","name"])).trim();
+        const barcode = String(find(["رقمالباركود","الباركود","barcode"])).trim();
+        const qty = Number(find(["العدد","الكمية","qty"]));
+        const price = Number(find(["سعرالشراء","سعرالشراءللوحدة","price"]));
+
+        if (!name) return;
+
+        const existing = barcode
+          ? stock.find(x => String(x.barcode) === barcode)
+          : null;
+
+        const item = {name, barcode, qty, price};
+
+        if (existing) {
+          if (confirm(
+            "الصنف موجود مسبقاً: " + name +
+            "\nالباركود: " + barcode +
+            "\nهل تريد استبدال بياناته بالبيانات الجديدة؟"
+          )) {
+            Object.assign(existing, item);
+            updated++;
+            save();
+          } else {
+            skipped++;
+          }
+        } else {
+          stock.push(item);
+          added++;
+          save();
+        }
+      });
+
+      alert(
+        "اكتمل الاستيراد\n" +
+        "أصناف جديدة: " + added +
+        "\nأصناف تم تحديثها: " + updated +
+        "\nأصناف تم تجاهلها: " + skipped
+      );
+
+      showItems();
+    } catch(error) {
+      alert("تعذر قراءة الملف: " + error.message);
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+  event.target.value = "";
+}
+
+// إنشاء نسخة احتياطية
+function backupData() {
+  const data = JSON.stringify(stock, null, 2);
+  const blob = new Blob([data], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "نسخة_احتياطية_الربيعي.json";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
+
+// استعادة نسخة احتياطية
+function restoreBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+
+      if (!Array.isArray(data) ||
+          !data.every(x => x && typeof x.name === "string")) {
+        alert("ملف النسخة الاحتياطية غير صالح");
+        return;
+      }
+
+      if (confirm("سيتم استبدال بيانات المخزون الحالية. هل تريد المتابعة؟")) {
+        stock = data.map(x => ({
+          name: x.name,
+          barcode: String(x.barcode || ""),
+          qty: Number(x.qty) || 0,
+          price: Number(x.price) || 0
+        }));
+
+        save();
+        alert("تمت استعادة البيانات بنجاح");
+      }
+    } catch(error) {
+      alert("تعذر استعادة النسخة الاحتياطية");
+    }
+  };
+
+  reader.readAsText(file);
+  event.target.value = "";
+}
+  
 <script>
 </body>
 </html>
