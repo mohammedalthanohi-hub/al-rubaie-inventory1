@@ -114,7 +114,7 @@ document.getElementById('items').innerHTML=filtered.map((x,i)=>`<div class="item
 }
 function delItem(i){if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);save()}}
 showItems();
-
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 let scanner = null;
 
 async function startScanner() {
