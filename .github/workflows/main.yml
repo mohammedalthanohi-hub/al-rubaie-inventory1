@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,6 +34,32 @@ jobs:
 
       - name: Add Android platform
         run: npx cap add android
+
+      - name: Configure Google Barcode Scanner
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("android/app/src/main/AndroidManifest.xml")
+          content = path.read_text()
+
+          metadata = '<meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />'
+
+          if metadata not in content:
+              content, count = re.subn(
+                  r'(<application\b[^>]*>)',
+                  r'\1\n        ' + metadata,
+                  content,
+                  count=1
+              )
+
+              if count != 1:
+                  raise SystemExit("Could not find application tag")
+
+          path.write_text(content)
+          print("Google Barcode Scanner configured successfully")
+          PY
 
       - name: Sync Android
         run: npx cap sync android
