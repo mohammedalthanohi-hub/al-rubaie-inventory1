@@ -24,6 +24,7 @@ button.small{background:#475569}
 </head>
 
 <body>
+
 <header>
 <h2>الربيعي ماركت</h2>
 <p>نظام إدارة وجرد المخزون</p>
@@ -33,33 +34,51 @@ button.small{background:#475569}
 
 <div class="card">
 <h3>إضافة صنف جديد</h3>
+
 <input id="barcode" placeholder="رقم الباركود">
-<button type="button" onclick="startScanner()">📷 مسح الباركود بالكاميرا</button>
+
+<button type="button" onclick="startScanner()">
+📷 مسح الباركود بالكاميرا
+</button>
+
 <div id="reader"></div>
-<button type="button" class="small" onclick="stopScanner()">إغلاق الكاميرا</button>
+
+<button type="button" class="small" onclick="stopScanner()">
+إغلاق الكاميرا
+</button>
 
 <input id="name" placeholder="اسم الصنف">
 <input id="qty" type="number" placeholder="الكمية">
 <input id="price" type="number" placeholder="سعر الشراء">
+
 <button onclick="addItem()">إضافة الصنف</button>
 </div>
 
 <div class="card">
 <h3>إدارة بيانات المخزون</h3>
 
-<button onclick="manualSave()">💾 حفظ البيانات الآن</button>
+<button onclick="manualSave()">
+💾 حفظ البيانات الآن
+</button>
 
 <button onclick="document.getElementById('excelFile').click()">
 📥 استيراد بيانات Excel
 </button>
+
 <input type="file" id="excelFile" accept=".xlsx,.xls" hidden onchange="importExcel(event)">
 
-<button onclick="exportExcel()">📤 تصدير المخزون إلى Excel</button>
-<button onclick="backupData()">💾 حفظ نسخة احتياطية</button>
+<button onclick="exportExcel()">
+📤 تصدير المخزون إلى Excel
+</button>
+
+<button onclick="backupData()">
+💾 حفظ نسخة احتياطية
+</button>
 
 <button onclick="document.getElementById('backupFile').click()">
 📂 استعادة نسخة احتياطية
 </button>
+
 <input type="file" id="backupFile" accept=".json" hidden onchange="restoreBackup(event)">
 
 <p>الحفظ التلقائي مفعل بعد كل عملية.</p>
@@ -68,20 +87,20 @@ button.small{background:#475569}
 
 <div class="card">
 <h3>بحث عن صنف</h3>
+
 <input id="search" placeholder="اكتب اسم الصنف أو الباركود" oninput="showItems()">
+
 <h3>الأصناف المسجلة</h3>
 <div id="items"></div>
 </div>
 
 </main>
 
-<!-- تحميل المكتبات قبل كود التطبيق -->
+<!-- مكتبة Excel -->
 <script src="./xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
 <script>
 let stock = JSON.parse(localStorage.getItem('stock') || '[]');
-let scanner = null;
 
 function save(){
   localStorage.setItem('stock', JSON.stringify(stock));
@@ -92,6 +111,7 @@ function save(){
 
 function updateSavedTime(){
   const saved = localStorage.getItem('stock_last_saved');
+
   document.getElementById('lastSaved').textContent =
     saved ? 'آخر حفظ: ' + new Date(saved).toLocaleString('ar') : '';
 }
@@ -132,6 +152,7 @@ function showItems(){
 
   document.getElementById('items').innerHTML = filtered.map(x=>{
     const index = stock.indexOf(x);
+
     return `<div class="item">
       <b>${escapeHTML(x.name)}</b><br>
       الباركود: ${escapeHTML(x.barcode || '-')}<br>
@@ -144,8 +165,11 @@ function showItems(){
 
 function escapeHTML(value){
   return String(value).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;',
-    '"':'&quot;',"'":'&#39;'
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
   })[c]);
 }
 
@@ -153,52 +177,6 @@ function delItem(i){
   if(confirm('هل تريد حذف الصنف؟')){
     stock.splice(i,1);
     save();
-  }
-}
-
-// قارئ الباركود
-async function startScanner(){
-
-  if(typeof Html5Qrcode === 'undefined'){
-    alert('تعذر تحميل مكتبة قارئ الباركود. تحقق من اتصال الإنترنت.');
-    return;
-  }
-
-  try{
-    if(scanner && scanner.isScanning){
-      return;
-    }
-
-    scanner = new Html5Qrcode('reader');
-
-    await scanner.start(
-      {facingMode:'environment'},
-      {fps:10,qrbox:{width:250,height:150}},
-      async (decodedText)=>{
-        document.getElementById('barcode').value = decodedText;
-        await stopScanner();
-        alert('تمت قراءة الباركود: ' + decodedText);
-      },
-      ()=>{}
-    );
-
-  }catch(error){
-    scanner = null;
-    alert('تعذر تشغيل الكاميرا: ' + error);
-  }
-}
-
-async function stopScanner(){
-  if(scanner){
-    try{
-      if(scanner.isScanning){
-        await scanner.stop();
-      }
-      scanner.clear();
-    }catch(error){
-      console.error(error);
-    }
-    scanner = null;
   }
 }
 
@@ -218,7 +196,9 @@ function exportExcel(){
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
+
   XLSX.utils.book_append_sheet(wb,ws,'المخزون');
+
   XLSX.writeFile(wb,'مخزون_الربيعي_ماركت.xlsx');
 }
 
@@ -237,6 +217,7 @@ function importExcel(event){
   reader.onload = function(e){
     try{
       const wb = XLSX.read(e.target.result,{type:'array'});
+
       const rows = XLSX.utils.sheet_to_json(
         wb.Sheets[wb.SheetNames[0]],
         {defval:''}
@@ -261,9 +242,16 @@ function importExcel(event){
         };
 
         const name=String(find(['الصنف','اسمالصنف','name'])).trim();
-        const barcode=String(find(['رقمالباركود','الباركود','barcode'])).trim();
+
+        const barcode=String(
+          find(['رقمالباركود','الباركود','barcode'])
+        ).trim();
+
         const qty=Number(find(['العدد','الكمية','qty'])) || 0;
-        const price=Number(find(['سعرالشراء','سعرالشراءللوحدة','price'])) || 0;
+
+        const price=Number(
+          find(['سعرالشراء','سعرالشراءللوحدة','price'])
+        ) || 0;
 
         if(!name) return;
 
@@ -317,9 +305,11 @@ function backupData(){
 
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
+
   a.href=url;
   a.download='نسخة_احتياطية_الربيعي.json';
   a.click();
+
   URL.revokeObjectURL(url);
 }
 
@@ -365,6 +355,7 @@ function restoreBackup(event){
 showItems();
 updateSavedTime();
 
+// تشغيل Service Worker
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('./sw.js')
@@ -372,6 +363,9 @@ if('serviceWorker' in navigator){
   });
 }
 </script>
+
+<!-- قارئ الباركود الأصلي -->
+<script src="./scanner.js"></script>
 
 </body>
 </html>
