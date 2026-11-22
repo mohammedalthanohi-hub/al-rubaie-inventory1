@@ -6,319 +6,372 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#14532d">
 <link rel="manifest" href="manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <title>جرد الربيعي ماركت</title>
+
 <style>
+*{box-sizing:border-box}
 body{font-family:Arial;background:#f1f5f1;margin:0;color:#222}
 header{background:#14532d;color:white;padding:20px;text-align:center}
 main{padding:15px;max-width:650px;margin:auto}
 .card{background:white;padding:15px;border-radius:12px;margin:12px 0}
-input,button{box-sizing:border-box;width:100%;padding:13px;margin:6px 0;border-radius:8px;font-size:16px}
+input,button{width:100%;padding:13px;margin:6px 0;border-radius:8px;font-size:16px}
 input{border:1px solid #bbb}
 button{border:0;background:#166534;color:white;font-weight:bold}
+button.small{background:#475569}
 .item{border-bottom:1px solid #ddd;padding:12px}
-.small{background:#475569}
+#reader{width:100%;margin-top:10px}
 </style>
 </head>
+
 <body>
 <header>
 <h2>الربيعي ماركت</h2>
 <p>نظام إدارة وجرد المخزون</p>
 </header>
+
 <main>
+
 <div class="card">
 <h3>إضافة صنف جديد</h3>
-
 <input id="barcode" placeholder="رقم الباركود">
 <button type="button" onclick="startScanner()">📷 مسح الباركود بالكاميرا</button>
-<div id="reader" style="width:100%;margin-top:10px"></div>
+<div id="reader"></div>
 <button type="button" class="small" onclick="stopScanner()">إغلاق الكاميرا</button>
+
 <input id="name" placeholder="اسم الصنف">
 <input id="qty" type="number" placeholder="الكمية">
 <input id="price" type="number" placeholder="سعر الشراء">
 <button onclick="addItem()">إضافة الصنف</button>
 </div>
-<div class="card">
 
 <div class="card">
 <h3>إدارة بيانات المخزون</h3>
-<button type="button" onclick="manualSave()">
-💾 حفظ البيانات الآن
-</button>
-<button type="button" onclick="document.getElementById('excelFile').click()">
+
+<button onclick="manualSave()">💾 حفظ البيانات الآن</button>
+
+<button onclick="document.getElementById('excelFile').click()">
 📥 استيراد بيانات Excel
 </button>
-
 <input type="file" id="excelFile" accept=".xlsx,.xls" hidden onchange="importExcel(event)">
 
-<button type="button" onclick="exportExcel()">
-📤 تصدير المخزون إلى Excel
-</button>
+<button onclick="exportExcel()">📤 تصدير المخزون إلى Excel</button>
+<button onclick="backupData()">💾 حفظ نسخة احتياطية</button>
 
-<button type="button" onclick="backupData()">
-💾 حفظ نسخة احتياطية
-</button><button type="button" onclick="manualSave()">
-💾 حفظ البيانات الآن
-</button>
-
-<button type="button" onclick="document.getElementById('backupFile').click()">
+<button onclick="document.getElementById('backupFile').click()">
 📂 استعادة نسخة احتياطية
 </button>
-
 <input type="file" id="backupFile" accept=".json" hidden onchange="restoreBackup(event)">
 
 <p>الحفظ التلقائي مفعل بعد كل عملية.</p>
+<p id="lastSaved"></p>
 </div>
-  
+
+<div class="card">
 <h3>بحث عن صنف</h3>
 <input id="search" placeholder="اكتب اسم الصنف أو الباركود" oninput="showItems()">
 <h3>الأصناف المسجلة</h3>
 <div id="items"></div>
 </div>
+
 </main>
+
+<!-- تحميل المكتبات قبل كود التطبيق -->
+<script src="./xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
 <script>
-let stock=JSON.parse(localStorage.getItem('stock')||'[]');
+let stock = JSON.parse(localStorage.getItem('stock') || '[]');
+let scanner = null;
 
 function save(){
   localStorage.setItem('stock', JSON.stringify(stock));
   localStorage.setItem('stock_last_saved', new Date().toISOString());
   showItems();
+  updateSavedTime();
+}
+
+function updateSavedTime(){
+  const saved = localStorage.getItem('stock_last_saved');
+  document.getElementById('lastSaved').textContent =
+    saved ? 'آخر حفظ: ' + new Date(saved).toLocaleString('ar') : '';
 }
 
 function manualSave(){
   save();
-  alert("تم حفظ جميع بيانات المخزون بنجاح");
-}
-}
-
-function manualSave(){
-  save();
-  alert("تم حفظ جميع بيانات المخزون بنجاح");
+  alert('تم حفظ جميع بيانات المخزون بنجاح');
 }
 
 function addItem(){
-let barcode=document.getElementById('barcode').value.trim();
-let name=document.getElementById('name').value.trim();
-let qty=Number(document.getElementById('qty').value);
-let price=Number(document.getElementById('price').value);
-if(!name){alert('أدخل اسم الصنف');return}
-stock.push({barcode,name,qty,price});
-save();
-['barcode','name','qty','price'].forEach(id=>document.getElementById(id).value='');
-alert('تمت إضافة الصنف');
-}
-function showItems(){
-let q=document.getElementById('search').value.toLowerCase();
-let filtered=stock.filter(x=>x.name.toLowerCase().includes(q)||x.barcode.includes(q));
-document.getElementById('items').innerHTML=filtered.map((x,i)=>`<div class="item"><b>${x.name}</b><br>الباركود: ${x.barcode||'-'}<br>الكمية: ${x.qty}<br>سعر الشراء: ${x.price}<br><button class="small" onclick="delItem(${stock.indexOf(x)})">حذف</button></div>`).join('');
-}
-function delItem(i){if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);save()}}
-showItems();
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-let scanner = null;
+  const barcode = document.getElementById('barcode').value.trim();
+  const name = document.getElementById('name').value.trim();
+  const qty = Number(document.getElementById('qty').value);
+  const price = Number(document.getElementById('price').value);
 
-async function startScanner() {
-  if (typeof Html5Qrcode === "undefined") {
-    alert("تعذر تحميل قارئ الباركود. تحقق من اتصال الإنترنت.");
+  if(!name){
+    alert('أدخل اسم الصنف');
     return;
   }
 
-  try {
-    if (!scanner) {
-      scanner = new Html5Qrcode("reader");
-    }
+  stock.push({barcode,name,qty,price});
+  save();
 
-    await scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 150 } },
-      async (decodedText) => {
-        document.getElementById("barcode").value = decodedText;
-        await stopScanner();
-        alert("تمت قراءة الباركود: " + decodedText);
-      },
-      () => {}
-    );
-  } catch (error) {
-    alert("تعذر تشغيل الكاميرا: " + error);
+  ['barcode','name','qty','price'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+
+  alert('تمت إضافة الصنف');
+}
+
+function showItems(){
+  const q = document.getElementById('search').value.toLowerCase();
+
+  const filtered = stock.filter(x =>
+    String(x.name || '').toLowerCase().includes(q) ||
+    String(x.barcode || '').includes(q)
+  );
+
+  document.getElementById('items').innerHTML = filtered.map(x=>{
+    const index = stock.indexOf(x);
+    return `<div class="item">
+      <b>${escapeHTML(x.name)}</b><br>
+      الباركود: ${escapeHTML(x.barcode || '-')}<br>
+      الكمية: ${Number(x.qty) || 0}<br>
+      سعر الشراء: ${Number(x.price) || 0}<br>
+      <button class="small" onclick="delItem(${index})">حذف</button>
+    </div>`;
+  }).join('');
+}
+
+function escapeHTML(value){
+  return String(value).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;',
+    '"':'&quot;',"'":'&#39;'
+  })[c]);
+}
+
+function delItem(i){
+  if(confirm('هل تريد حذف الصنف؟')){
+    stock.splice(i,1);
+    save();
   }
 }
 
-async function stopScanner() {
-  if (scanner && scanner.isScanning) {
-    await scanner.stop();
-    scanner.clear();
+// قارئ الباركود
+async function startScanner(){
+
+  if(typeof Html5Qrcode === 'undefined'){
+    alert('تعذر تحميل مكتبة قارئ الباركود. تحقق من اتصال الإنترنت.');
+    return;
+  }
+
+  try{
+    if(scanner && scanner.isScanning){
+      return;
+    }
+
+    scanner = new Html5Qrcode('reader');
+
+    await scanner.start(
+      {facingMode:'environment'},
+      {fps:10,qrbox:{width:250,height:150}},
+      async (decodedText)=>{
+        document.getElementById('barcode').value = decodedText;
+        await stopScanner();
+        alert('تمت قراءة الباركود: ' + decodedText);
+      },
+      ()=>{}
+    );
+
+  }catch(error){
+    scanner = null;
+    alert('تعذر تشغيل الكاميرا: ' + error);
+  }
+}
+
+async function stopScanner(){
+  if(scanner){
+    try{
+      if(scanner.isScanning){
+        await scanner.stop();
+      }
+      scanner.clear();
+    }catch(error){
+      console.error(error);
+    }
     scanner = null;
   }
 }
-  </script>
-<script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js")
-      .catch(error => console.error("SW error:", error));
-  });
-}
-<script src="./xlsx.full.min.js"></script>
-<script src="https://unpkg.com/html5-qrcode"></script>
 
-// تصدير المخزون إلى Excel
-function exportExcel() {
-  if (typeof XLSX === "undefined") {
-    alert("مكتبة Excel غير جاهزة");
+// تصدير Excel
+function exportExcel(){
+  if(typeof XLSX === 'undefined'){
+    alert('مكتبة Excel غير جاهزة');
     return;
   }
 
-  const data = stock.map(x => ({
-    "الصنف": x.name,
-    "رقم الباركود": x.barcode,
-    "العدد": x.qty,
-    "سعر الشراء": x.price
+  const data = stock.map(x=>({
+    'الصنف':x.name,
+    'رقم الباركود':x.barcode,
+    'العدد':x.qty,
+    'سعر الشراء':x.price
   }));
 
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "المخزون");
-  XLSX.writeFile(wb, "مخزون_الربيعي_ماركت.xlsx");
+  XLSX.utils.book_append_sheet(wb,ws,'المخزون');
+  XLSX.writeFile(wb,'مخزون_الربيعي_ماركت.xlsx');
 }
 
 // استيراد Excel
-function importExcel(event) {
+function importExcel(event){
   const file = event.target.files[0];
-  if (!file) return;
+  if(!file) return;
 
-  if (typeof XLSX === "undefined") {
-    alert("مكتبة Excel غير جاهزة");
+  if(typeof XLSX === 'undefined'){
+    alert('مكتبة Excel غير جاهزة');
     return;
   }
 
   const reader = new FileReader();
 
-  reader.onload = function(e) {
-    try {
-      const wb = XLSX.read(e.target.result, {type:"array"});
+  reader.onload = function(e){
+    try{
+      const wb = XLSX.read(e.target.result,{type:'array'});
       const rows = XLSX.utils.sheet_to_json(
         wb.Sheets[wb.SheetNames[0]],
-        {defval:""}
+        {defval:''}
       );
 
-      if (!rows.length) {
-        alert("ملف Excel فارغ");
+      if(!rows.length){
+        alert('ملف Excel فارغ');
         return;
       }
 
-      const normalize = s => String(s).replace(/\s/g,"").toLowerCase();
+      const normalize = s =>
+        String(s).replace(/\s/g,'').toLowerCase();
 
-      let added = 0;
-      let updated = 0;
-      let skipped = 0;
+      let added=0,updated=0,skipped=0;
 
-      rows.forEach(row => {
-        const keys = Object.keys(row);
-        const find = names => {
-          const key = keys.find(k => names.includes(normalize(k)));
-          return key ? row[key] : "";
+      rows.forEach(row=>{
+        const keys=Object.keys(row);
+
+        const find=names=>{
+          const key=keys.find(k=>names.includes(normalize(k)));
+          return key ? row[key] : '';
         };
 
-        const name = String(find(["الصنف","اسمالصنف","name"])).trim();
-        const barcode = String(find(["رقمالباركود","الباركود","barcode"])).trim();
-        const qty = Number(find(["العدد","الكمية","qty"]));
-        const price = Number(find(["سعرالشراء","سعرالشراءللوحدة","price"]));
+        const name=String(find(['الصنف','اسمالصنف','name'])).trim();
+        const barcode=String(find(['رقمالباركود','الباركود','barcode'])).trim();
+        const qty=Number(find(['العدد','الكمية','qty'])) || 0;
+        const price=Number(find(['سعرالشراء','سعرالشراءللوحدة','price'])) || 0;
 
-        if (!name) return;
+        if(!name) return;
 
-        const existing = barcode
-          ? stock.find(x => String(x.barcode) === barcode)
+        const existing=barcode
+          ? stock.find(x=>String(x.barcode || '')===barcode)
           : null;
 
-        const item = {name, barcode, qty, price};
+        const item={name,barcode,qty,price};
 
-        if (existing) {
-          if (confirm(
-            "الصنف موجود مسبقاً: " + name +
-            "\nالباركود: " + barcode +
-            "\nهل تريد استبدال بياناته بالبيانات الجديدة؟"
-          )) {
-            Object.assign(existing, item);
+        if(existing){
+          if(confirm(
+            'الصنف موجود مسبقاً: '+name+
+            '\nالباركود: '+barcode+
+            '\nهل تريد استبدال بياناته؟'
+          )){
+            Object.assign(existing,item);
             updated++;
-            save();
-          } else {
+          }else{
             skipped++;
           }
-        } else {
+        }else{
           stock.push(item);
           added++;
-          save();
         }
       });
 
+      save();
+
       alert(
-        "اكتمل الاستيراد\n" +
-        "أصناف جديدة: " + added +
-        "\nأصناف تم تحديثها: " + updated +
-        "\nأصناف تم تجاهلها: " + skipped
+        'اكتمل الاستيراد\n'+
+        'أصناف جديدة: '+added+
+        '\nتم تحديثها: '+updated+
+        '\nتم تجاهلها: '+skipped
       );
 
-      showItems();
-    } catch(error) {
-      alert("تعذر قراءة الملف: " + error.message);
+    }catch(error){
+      alert('تعذر قراءة الملف: '+error.message);
     }
   };
 
   reader.readAsArrayBuffer(file);
-  event.target.value = "";
+  event.target.value='';
 }
 
-// إنشاء نسخة احتياطية
-function backupData() {
-  const data = JSON.stringify(stock, null, 2);
-  const blob = new Blob([data], {type:"application/json"});
-  const url = URL.createObjectURL(blob);
+// النسخة الاحتياطية
+function backupData(){
+  const blob=new Blob(
+    [JSON.stringify(stock,null,2)],
+    {type:'application/json'}
+  );
 
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "نسخة_احتياطية_الربيعي.json";
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='نسخة_احتياطية_الربيعي.json';
   a.click();
-
   URL.revokeObjectURL(url);
 }
 
-// استعادة نسخة احتياطية
-function restoreBackup(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+// استعادة النسخة الاحتياطية
+function restoreBackup(event){
+  const file=event.target.files[0];
+  if(!file) return;
 
-  const reader = new FileReader();
+  const reader=new FileReader();
 
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
 
-      if (!Array.isArray(data) ||
-          !data.every(x => x && typeof x.name === "string")) {
-        alert("ملف النسخة الاحتياطية غير صالح");
+      if(!Array.isArray(data) ||
+         !data.every(x=>x && typeof x.name==='string')){
+        alert('ملف النسخة الاحتياطية غير صالح');
         return;
       }
 
-      if (confirm("سيتم استبدال بيانات المخزون الحالية. هل تريد المتابعة؟")) {
-        stock = data.map(x => ({
-          name: x.name,
-          barcode: String(x.barcode || ""),
-          qty: Number(x.qty) || 0,
-          price: Number(x.price) || 0
+      if(confirm('سيتم استبدال بيانات المخزون الحالية. هل تريد المتابعة؟')){
+        stock=data.map(x=>({
+          name:x.name,
+          barcode:String(x.barcode || ''),
+          qty:Number(x.qty) || 0,
+          price:Number(x.price) || 0
         }));
 
         save();
-        alert("تمت استعادة البيانات بنجاح");
+        alert('تمت استعادة البيانات بنجاح');
       }
-    } catch(error) {
-      alert("تعذر استعادة النسخة الاحتياطية");
+
+    }catch(error){
+      alert('تعذر استعادة النسخة الاحتياطية');
     }
   };
 
   reader.readAsText(file);
-  event.target.value = "";
+  event.target.value='';
 }
-  
-<script>
+
+// تشغيل التطبيق
+showItems();
+updateSavedTime();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('./sw.js')
+      .catch(error=>console.error('SW error:',error));
+  });
+}
+</script>
+
 </body>
 </html>
