@@ -248,8 +248,8 @@ async function exportExcel(){
   }
 }
 
-// الاستيراد: الأعمدة المطلوبة هي اسم الصنف، كمية النظام، سعر الشراء.
-// كل صف صالح يضاف كسجل جديد، حتى عند تكرار اسم الصنف.
+// الاستيراد: اسم الصنف، رمز الباركود، كمية النظام، سعر الشراء.
+// إذا كان الباركود موجوداً يتم تحديث الصنف نفسه مع الحفاظ على بيانات الجرد الفعلي.
 function importExcel(event){
   const file=event.target.files && event.target.files[0];
   if(!file)return;
@@ -259,36 +259,48 @@ function importExcel(event){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
       const sheet=wb.Sheets[wb.SheetNames[0]];
-      const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
+      // raw:false يساعد على قراءة الباركود كما يظهر في Excel، بما في ذلك الأصفار المنسقة.
+      const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false});
       if(!matrix.length){alert('ملف Excel فارغ');return;}
       const headers=matrix[0];
       const nameIndex=findHeaderIndex(headers,['اسمالصنف','الصنف','اسم','name','itemname']);
+      const barcodeIndex=findHeaderIndex(headers,['رمزالباركود','الباركود','باركود','رقمالباركود','barcode','barcodeid']);
       const qtyIndex=findHeaderIndex(headers,['كميةالنظام','الكميهالنظام','الكميةالمسجلة','الكميهالمسجله','الكمية','الكميه','العدد','qty','quantity','systemqty']);
       const priceIndex=findHeaderIndex(headers,['سعرالشراء','سعرالشراءللوحدة','سعرشراء','price','purchaseprice']);
-      if(nameIndex<0 || qtyIndex<0 || priceIndex<0){
-        alert('عناوين الأعمدة غير مطابقة. يجب أن يحتوي الصف الأول على: اسم الصنف، كمية النظام، سعر الشراء.');
+      if(nameIndex<0 || barcodeIndex<0 || qtyIndex<0 || priceIndex<0){
+        alert('عناوين الأعمدة غير مطابقة. يجب أن يحتوي الصف الأول على: اسم الصنف، رمز الباركود، كمية النظام، سعر الشراء.');
         return;
       }
-      let added=0,skipped=0;
+      let added=0,updated=0,skipped=0;
       for(let i=1;i<matrix.length;i++){
         const row=matrix[i];
         const name=String(row[nameIndex]??'').trim();
-        if(!name){skipped++;continue;}
+        const barcode=String(row[barcodeIndex]??'').trim();
+        if(!name || !barcode){skipped++;continue;}
         const qty=parseExcelNumber(row[qtyIndex]);
         const price=parseExcelNumber(row[priceIndex]);
         if(!Number.isFinite(qty)||qty<0||!Number.isFinite(price)||price<0){skipped++;continue;}
-        stock.push({barcode:'',name,qty,price});
-        added++;
+        const existingIndex=stock.findIndex(x=>String(x.barcode||'').trim()===barcode);
+        if(existingIndex>=0){
+          // لا نغيّر actualQty أو countedAt حتى لا نفقد نتيجة الجرد السابقة.
+          stock[existingIndex].name=name;
+          stock[existingIndex].barcode=barcode;
+          stock[existingIndex].qty=qty;
+          stock[existingIndex].price=price;
+          updated++;
+        }else{
+          stock.push({barcode,name,qty,price});
+          added++;
+        }
       }
       save();
-      alert('اكتمل الاستيراد بنجاح\\nالأصناف المضافة كسجلات جديدة: '+added+'\\nالصفوف المتجاهلة أو غير الصالحة: '+skipped);
+      alert('اكتمل الاستيراد بنجاح\nأصناف جديدة: '+added+'\nأصناف تم تحديثها حسب الباركود: '+updated+'\nصفوف متجاهلة أو غير صالحة: '+skipped);
     }catch(error){alert('تعذر قراءة الملف: '+(error.message||error));}
     finally{event.target.value='';}
   };
   reader.onerror=function(){alert('تعذرت قراءة ملف Excel.');event.target.value='';};
   reader.readAsArrayBuffer(file);
 }
-
 async function backupData(){
   const json=JSON.stringify(stock,null,2);
   const base64=btoa(unescape(encodeURIComponent(json)));
