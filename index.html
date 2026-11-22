@@ -74,6 +74,7 @@ button.secondary{background:#0f766e}
 </main>
 
 <script src="./xlsx.full.min.js"></script>
+<script src="./native.js"></script>
 <script>
 let stock = JSON.parse(localStorage.getItem('stock') || '[]');
 let selectedCountIndex = -1;
@@ -190,85 +191,118 @@ function saveActualCount(){
   alert('تم حفظ الكمية الفعلية دون تغيير كمية المخزون المسجلة.');
 }
 
-// إنشاء ملف Excel ومشاركته/تنزيله على الهاتف
+function toArabicWesternNumber(value){
+  return String(value??'').replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g,d=>'۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+}
+function parseExcelNumber(value){
+  if(value===null || value===undefined || String(value).trim()==='')return 0;
+  const normalized=toArabicWesternNumber(value).replace(/[٬, ]/g,'').replace(/٫/g,'.');
+  const number=Number(normalized);
+  return Number.isFinite(number)?number:NaN;
+}
+function normalizeHeader(value){
+  return String(value??'').replace(/^\uFEFF/,'').replace(/[ًٌٍَُِّْـ]/g,'').replace(/\s+/g,'').toLowerCase();
+}
+function findHeaderIndex(headers, aliases){
+  const normalized=headers.map(normalizeHeader);
+  return normalized.findIndex(h=>aliases.includes(h));
+}
+
+// التصدير: ملف Excel بخمسة أعمدة، مع الحفظ/المشاركة الأصلية على أندرويد.
 async function exportExcel(){
   if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة.');return;}
   if(!stock.length){alert('لا توجد أصناف لتصديرها.');return;}
   try{
-    const data=stock.map(x=>({
-      'الباركود':x.barcode||'',
-      'اسم الصنف':x.name||'',
-      'الكمية المسجلة':Number(x.qty)||0,
-      'الكمية الفعلية':x.actualQty===undefined?'':Number(x.actualQty),
-      'الفرق':x.actualQty===undefined?'':Number(x.actualQty)-(Number(x.qty)||0),
-      'تاريخ الجرد':x.countedAt||'',
-      'سعر الشراء':Number(x.price)||0
-    }));
-    const ws=XLSX.utils.json_to_sheet(data);
+    const rows=[['اسم الصنف','كمية النظام','سعر الشراء','الفعلي','الفارق']];
+    stock.forEach(x=>{
+      const hasActual=x.actualQty!==undefined && x.actualQty!==null && x.actualQty!=='';
+      const systemQty=Number(x.qty)||0;
+      const actual=hasActual?Number(x.actualQty):'';
+      const difference=hasActual?actual-systemQty:'';
+      rows.push([x.name||'',systemQty,Number(x.price)||0,actual,difference]);
+    });
+    const ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:28},{wch:16},{wch:16},{wch:14},{wch:14}];
     const wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'المخزون والجرد');
-    const array=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-    const blob=new Blob([array],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const file=new File([blob],'مخزون_وجرد_الربيعي_ماركت.xlsx',{type:blob.type});
-    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
-      await navigator.share({files:[file],title:'مخزون وجرد الربيعي ماركت',text:'ملف بيانات المخزون والجرد'});
-      alert('تم تجهيز ملف Excel للمشاركة أو الحفظ.');
+    const base64=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+    const fileName='مخزون_وجرد_الربيعي_ماركت.xlsx';
+    if(window.NativeFiles && typeof window.NativeFiles.saveAndShare==='function'){
+      await window.NativeFiles.saveAndShare(fileName,base64,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      alert('تم تجهيز ملف Excel. اختر «حفظ في الملفات» أو تطبيقاً مناسباً من قائمة المشاركة.');
       return;
     }
+    const binary=atob(base64);
+    const bytes=new Uint8Array(binary.length);
+    for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+    const blob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url;
-    a.download='مخزون_وجرد_الربيعي_ماركت.xlsx';
-    a.style.display='none';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    a.href=url;a.download=fileName;a.style.display='none';
+    document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-    alert('تم إنشاء ملف Excel. إذا لم يظهر التنزيل، أخبرني وسنضيف الحفظ عبر مكوّن Android الأصلي.');
+    alert('تم إنشاء ملف Excel. إذا لم يظهر خيار الحفظ، تأكد من بناء APK بعد تثبيت ملفات التحديث.');
   }catch(error){
     if(error && error.name==='AbortError')return;
     alert('تعذر تصدير Excel: '+(error.message||error));
   }
 }
 
+// الاستيراد: الأعمدة المطلوبة هي اسم الصنف، كمية النظام، سعر الشراء.
+// كل صف صالح يضاف كسجل جديد، حتى عند تكرار اسم الصنف.
 function importExcel(event){
-  const file=event.target.files[0];if(!file)return;
-  if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة');return;}
+  const file=event.target.files && event.target.files[0];
+  if(!file)return;
+  if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة');event.target.value='';return;}
   const reader=new FileReader();
   reader.onload=function(e){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
-      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
-      if(!rows.length){alert('ملف Excel فارغ');return;}
-      const normalize=s=>String(s).replace(/\s/g,'').toLowerCase();
-      let added=0,updated=0,skipped=0;
-      rows.forEach(row=>{
-        const keys=Object.keys(row);
-        const find=names=>{const key=keys.find(k=>names.includes(normalize(k)));return key?row[key]:'';};
-        const name=String(find(['الصنف','اسمالصنف','name'])).trim();
-        const barcode=String(find(['رقمالباركود','الباركود','barcode'])).trim();
-        const qty=Number(find(['العدد','الكمية','الكميه','qty']))||0;
-        const price=Number(find(['سعرالشراء','سعرالشراءللوحدة','price']))||0;
-        if(!name)return;
-        const existing=barcode?stock.find(x=>String(x.barcode||'')===barcode):null;
-        const item={name,barcode,qty,price};
-        if(existing){
-          if(confirm('الصنف موجود مسبقاً: '+name+'\nالباركود: '+barcode+'\nهل تريد استبدال بياناته؟')){
-            // لا نمسح نتيجة الجرد السابقة عند تحديث بيانات الصنف
-            Object.assign(existing,item);updated++;
-          }else skipped++;
-        }else{stock.push(item);added++;}
-      });
+      const sheet=wb.Sheets[wb.SheetNames[0]];
+      const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:true});
+      if(!matrix.length){alert('ملف Excel فارغ');return;}
+      const headers=matrix[0];
+      const nameIndex=findHeaderIndex(headers,['اسمالصنف','الصنف','اسم','name','itemname']);
+      const qtyIndex=findHeaderIndex(headers,['كميةالنظام','الكميهالنظام','الكميةالمسجلة','الكميهالمسجله','الكمية','الكميه','العدد','qty','quantity','systemqty']);
+      const priceIndex=findHeaderIndex(headers,['سعرالشراء','سعرالشراءللوحدة','سعرشراء','price','purchaseprice']);
+      if(nameIndex<0 || qtyIndex<0 || priceIndex<0){
+        alert('عناوين الأعمدة غير مطابقة. يجب أن يحتوي الصف الأول على: اسم الصنف، كمية النظام، سعر الشراء.');
+        return;
+      }
+      let added=0,skipped=0;
+      for(let i=1;i<matrix.length;i++){
+        const row=matrix[i];
+        const name=String(row[nameIndex]??'').trim();
+        if(!name){skipped++;continue;}
+        const qty=parseExcelNumber(row[qtyIndex]);
+        const price=parseExcelNumber(row[priceIndex]);
+        if(!Number.isFinite(qty)||qty<0||!Number.isFinite(price)||price<0){skipped++;continue;}
+        stock.push({barcode:'',name,qty,price});
+        added++;
+      }
       save();
-      alert('اكتمل الاستيراد\nأصناف جديدة: '+added+'\nتم تحديثها: '+updated+'\nتم تجاهلها: '+skipped);
-    }catch(error){alert('تعذر قراءة الملف: '+error.message);}
+      alert('اكتمل الاستيراد بنجاح\\nالأصناف المضافة كسجلات جديدة: '+added+'\\nالصفوف المتجاهلة أو غير الصالحة: '+skipped);
+    }catch(error){alert('تعذر قراءة الملف: '+(error.message||error));}
+    finally{event.target.value='';}
   };
-  reader.readAsArrayBuffer(file);event.target.value='';
+  reader.onerror=function(){alert('تعذرت قراءة ملف Excel.');event.target.value='';};
+  reader.readAsArrayBuffer(file);
 }
-function backupData(){
-  const blob=new Blob([JSON.stringify(stock,null,2)],{type:'application/json'});
+
+async function backupData(){
+  const json=JSON.stringify(stock,null,2);
+  const base64=btoa(unescape(encodeURIComponent(json)));
+  const fileName='نسخة_احتياطية_الربيعي.json';
+  try{
+    if(window.NativeFiles && typeof window.NativeFiles.saveAndShare==='function'){
+      await window.NativeFiles.saveAndShare(fileName,base64,'application/json');
+      alert('تم تجهيز النسخة الاحتياطية. اختر مكان حفظها من قائمة المشاركة.');
+      return;
+    }
+  }catch(error){if(error && error.name==='AbortError')return;alert('تعذر حفظ النسخة الاحتياطية: '+(error.message||error));return;}
+  const blob=new Blob([json],{type:'application/json;charset=utf-8'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='نسخة_احتياطية_الربيعي.json';a.click();
+  const a=document.createElement('a');a.href=url;a.download=fileName;a.click();
   setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 function restoreBackup(event){
@@ -283,8 +317,9 @@ function restoreBackup(event){
         save();selectedCountIndex=-1;renderCountSelection();alert('تمت استعادة البيانات بنجاح');
       }
     }catch(error){alert('تعذر استعادة النسخة الاحتياطية');}
+    finally{event.target.value='';}
   };
-  reader.readAsText(file);event.target.value='';
+  reader.readAsText(file);
 }
 showItems();
 updateSavedTime();
@@ -295,4 +330,5 @@ if('serviceWorker' in navigator){
 </script>
 <script src="./scanner.js"></script>
 </body>
-</html>
+  </html>
+  
