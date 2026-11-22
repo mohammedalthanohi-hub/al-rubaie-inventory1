@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -7,100 +6,77 @@
 <meta name="theme-color" content="#14532d">
 <link rel="manifest" href="manifest.json">
 <title>جرد الربيعي ماركت</title>
-
 <style>
 *{box-sizing:border-box}
 body{font-family:Arial;background:#f1f5f1;margin:0;color:#222}
 header{background:#14532d;color:white;padding:20px;text-align:center}
-main{padding:15px;max-width:650px;margin:auto}
+main{padding:15px;max-width:700px;margin:auto}
 .card{background:white;padding:15px;border-radius:12px;margin:12px 0}
 input,button{width:100%;padding:13px;margin:6px 0;border-radius:8px;font-size:16px}
 input{border:1px solid #bbb}
-button{border:0;background:#166534;color:white;font-weight:bold}
+button{border:0;background:#166534;color:white;font-weight:bold;cursor:pointer}
 button.small{background:#475569}
+button.secondary{background:#0f766e}
 .item{border-bottom:1px solid #ddd;padding:12px}
+.muted{color:#64748b;font-size:14px}
+.good{color:#166534;font-weight:bold}
+.bad{color:#b91c1c;font-weight:bold}
 #reader{width:100%;margin-top:10px}
+.result{background:#f8fafc;border:1px solid #cbd5e1;padding:12px;border-radius:8px;margin-top:10px}
 </style>
 </head>
-
 <body>
-
 <header>
 <h2>الربيعي ماركت</h2>
 <p>نظام إدارة وجرد المخزون</p>
 </header>
-
 <main>
-
 <div class="card">
 <h3>إضافة صنف جديد</h3>
-
 <input id="barcode" placeholder="رقم الباركود">
-
-<button type="button" onclick="startScanner()">
-📷 مسح الباركود بالكاميرا
-</button>
-
+<button type="button" onclick="startScanner('add')">📷 مسح باركود لإضافة صنف</button>
 <div id="reader"></div>
-
-<button type="button" class="small" onclick="stopScanner()">
-إغلاق الكاميرا
-</button>
-
+<button type="button" class="small" onclick="stopScanner()">إغلاق الكاميرا</button>
 <input id="name" placeholder="اسم الصنف">
-<input id="qty" type="number" placeholder="الكمية">
-<input id="price" type="number" placeholder="سعر الشراء">
-
+<input id="qty" type="number" min="0" step="any" placeholder="الكمية المسجلة">
+<input id="price" type="number" min="0" step="any" placeholder="سعر الشراء">
 <button onclick="addItem()">إضافة الصنف</button>
 </div>
 
 <div class="card">
+<h3>الجرد الفعلي بالكاميرا</h3>
+<p class="muted">امسح باركود الصنف، ثم أدخل الكمية التي وجدتها فعلياً في المستودع. لن تتغير كمية المخزون المسجلة.</p>
+<button type="button" class="secondary" onclick="startScanner('count')">📷 مسح باركود للبحث والجرد</button>
+<div id="countResult" class="result">لم يتم اختيار صنف بعد.</div>
+<input id="actualQty" type="number" min="0" step="any" placeholder="أدخل الكمية الفعلية">
+<button type="button" onclick="saveActualCount()">💾 حفظ الكمية الفعلية</button>
+</div>
+
+<div class="card">
 <h3>إدارة بيانات المخزون</h3>
-
-<button onclick="manualSave()">
-💾 حفظ البيانات الآن
-</button>
-
-<button onclick="document.getElementById('excelFile').click()">
-📥 استيراد بيانات Excel
-</button>
-
+<button onclick="manualSave()">💾 حفظ البيانات الآن</button>
+<button onclick="document.getElementById('excelFile').click()">📥 استيراد بيانات Excel</button>
 <input type="file" id="excelFile" accept=".xlsx,.xls" hidden onchange="importExcel(event)">
-
-<button onclick="exportExcel()">
-📤 تصدير المخزون إلى Excel
-</button>
-
-<button onclick="backupData()">
-💾 حفظ نسخة احتياطية
-</button>
-
-<button onclick="document.getElementById('backupFile').click()">
-📂 استعادة نسخة احتياطية
-</button>
-
+<button onclick="exportExcel()">📤 تصدير المخزون ونتائج الجرد إلى Excel</button>
+<button onclick="backupData()">💾 حفظ نسخة احتياطية</button>
+<button onclick="document.getElementById('backupFile').click()">📂 استعادة نسخة احتياطية</button>
 <input type="file" id="backupFile" accept=".json" hidden onchange="restoreBackup(event)">
-
 <p>الحفظ التلقائي مفعل بعد كل عملية.</p>
 <p id="lastSaved"></p>
 </div>
 
 <div class="card">
 <h3>بحث عن صنف</h3>
-
 <input id="search" placeholder="اكتب اسم الصنف أو الباركود" oninput="showItems()">
-
 <h3>الأصناف المسجلة</h3>
 <div id="items"></div>
 </div>
-
 </main>
 
-<!-- مكتبة Excel -->
 <script src="./xlsx.full.min.js"></script>
-
 <script>
 let stock = JSON.parse(localStorage.getItem('stock') || '[]');
+let selectedCountIndex = -1;
 
 function save(){
   localStorage.setItem('stock', JSON.stringify(stock));
@@ -108,264 +84,215 @@ function save(){
   showItems();
   updateSavedTime();
 }
-
 function updateSavedTime(){
-  const saved = localStorage.getItem('stock_last_saved');
-
-  document.getElementById('lastSaved').textContent =
-    saved ? 'آخر حفظ: ' + new Date(saved).toLocaleString('ar') : '';
+  const saved=localStorage.getItem('stock_last_saved');
+  document.getElementById('lastSaved').textContent=saved?'آخر حفظ: '+new Date(saved).toLocaleString('ar'):'';
 }
-
-function manualSave(){
-  save();
-  alert('تم حفظ جميع بيانات المخزون بنجاح');
-}
+function manualSave(){save();alert('تم حفظ جميع بيانات المخزون بنجاح');}
 
 function addItem(){
-  const barcode = document.getElementById('barcode').value.trim();
-  const name = document.getElementById('name').value.trim();
-  const qty = Number(document.getElementById('qty').value);
-  const price = Number(document.getElementById('price').value);
-
-  if(!name){
-    alert('أدخل اسم الصنف');
+  const barcode=document.getElementById('barcode').value.trim();
+  const name=document.getElementById('name').value.trim();
+  const qty=Number(document.getElementById('qty').value);
+  const price=Number(document.getElementById('price').value);
+  if(!name){alert('أدخل اسم الصنف');return;}
+  if(barcode && stock.some(x=>String(x.barcode||'')===barcode)){
+    alert('هذا الباركود مسجل مسبقاً. ابحث عن الصنف بدلاً من إضافة نسخة مكررة.');
     return;
   }
-
-  stock.push({barcode,name,qty,price});
+  stock.push({barcode,name,qty:Number.isFinite(qty)?qty:0,price:Number.isFinite(price)?price:0});
   save();
-
-  ['barcode','name','qty','price'].forEach(id=>{
-    document.getElementById(id).value='';
-  });
-
+  ['barcode','name','qty','price'].forEach(id=>document.getElementById(id).value='');
   alert('تمت إضافة الصنف');
 }
 
 function showItems(){
-  const q = document.getElementById('search').value.toLowerCase();
-
-  const filtered = stock.filter(x =>
-    String(x.name || '').toLowerCase().includes(q) ||
-    String(x.barcode || '').includes(q)
+  const q=document.getElementById('search').value.toLowerCase().trim();
+  const filtered=stock.filter(x=>
+    String(x.name||'').toLowerCase().includes(q) ||
+    String(x.barcode||'').toLowerCase().includes(q)
   );
-
-  document.getElementById('items').innerHTML = filtered.map(x=>{
-    const index = stock.indexOf(x);
-
+  document.getElementById('items').innerHTML=filtered.map(x=>{
+    const index=stock.indexOf(x);
+    const hasActual=x.actualQty!==undefined && x.actualQty!==null && x.actualQty!=='';
+    const diff=hasActual?Number(x.actualQty)-Number(x.qty||0):null;
     return `<div class="item">
       <b>${escapeHTML(x.name)}</b><br>
-      الباركود: ${escapeHTML(x.barcode || '-')}<br>
-      الكمية: ${Number(x.qty) || 0}<br>
-      سعر الشراء: ${Number(x.price) || 0}<br>
+      الباركود: ${escapeHTML(x.barcode||'-')}<br>
+      كمية النظام: ${Number(x.qty)||0}<br>
+      سعر الشراء: ${Number(x.price)||0}<br>
+      ${hasActual?`الكمية الفعلية: ${Number(x.actualQty)||0}<br>الفرق: <span class="${diff===0?'good':diff>0?'good':'bad'}">${diff>0?'+':''}${diff}</span><br><span class="muted">آخر جرد: ${escapeHTML(x.countedAt||'-')}</span><br>`:'لم يتم جرده بعد<br>'}
+      <button class="small" onclick="selectItemForCount(${index})">تسجيل / تعديل الجرد</button>
       <button class="small" onclick="delItem(${index})">حذف</button>
     </div>`;
-  }).join('');
+  }).join('') || '<p class="muted">لا توجد أصناف مطابقة.</p>';
 }
-
 function escapeHTML(value){
-  return String(value).replace(/[&<>"']/g, c => ({
-    '&':'&amp;',
-    '<':'&lt;',
-    '>':'&gt;',
-    '"':'&quot;',
-    "'":'&#39;'
-  })[c]);
+  return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
 function delItem(i){
-  if(confirm('هل تريد حذف الصنف؟')){
-    stock.splice(i,1);
-    save();
-  }
+  if(confirm('هل تريد حذف الصنف؟')){stock.splice(i,1);if(selectedCountIndex===i)selectedCountIndex=-1;save();renderCountSelection();}
 }
-
-// تصدير Excel
-function exportExcel(){
-  if(typeof XLSX === 'undefined'){
-    alert('مكتبة Excel غير جاهزة');
+function selectItemForCount(i){
+  selectedCountIndex=i;
+  const item=stock[i];
+  document.getElementById('actualQty').value=item.actualQty??'';
+  renderCountSelection();
+  document.getElementById('actualQty').focus();
+}
+function renderCountSelection(){
+  const box=document.getElementById('countResult');
+  if(selectedCountIndex<0 || !stock[selectedCountIndex]){
+    box.textContent='لم يتم اختيار صنف بعد.';
     return;
   }
-
-  const data = stock.map(x=>({
-    'الصنف':x.name,
-    'رقم الباركود':x.barcode,
-    'العدد':x.qty,
-    'سعر الشراء':x.price
-  }));
-
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(wb,ws,'المخزون');
-
-  XLSX.writeFile(wb,'مخزون_الربيعي_ماركت.xlsx');
+  const x=stock[selectedCountIndex];
+  const actual=x.actualQty===undefined?'لم يسجل بعد':Number(x.actualQty);
+  const diff=x.actualQty===undefined?'—':Number(x.actualQty)-Number(x.qty||0);
+  box.innerHTML=`<b>${escapeHTML(x.name)}</b><br>الباركود: ${escapeHTML(x.barcode||'-')}<br>كمية النظام: ${Number(x.qty)||0}<br>الكمية الفعلية المحفوظة: ${actual}<br>الفرق: ${diff}`;
+}
+function handleScannedBarcode(value){
+  const code=String(value||'').trim();
+  if(!code)return;
+  const barcodeInput=document.getElementById('barcode');
+  if(window.scannerPurpose==='count'){
+    const index=stock.findIndex(x=>String(x.barcode||'').trim()===code);
+    if(index<0){
+      selectedCountIndex=-1;
+      renderCountSelection();
+      alert('لم يتم العثور على صنف بهذا الباركود: '+code);
+      return;
+    }
+    selectItemForCount(index);
+    document.getElementById('actualQty').focus();
+  }else{
+    barcodeInput.value=code;
+    const existing=stock.findIndex(x=>String(x.barcode||'').trim()===code);
+    if(existing>=0){
+      alert('هذا الباركود مسجل للصنف: '+stock[existing].name+'، يمكنك جرده من قسم الجرد الفعلي.');
+    }
+  }
+}
+function saveActualCount(){
+  if(selectedCountIndex<0 || !stock[selectedCountIndex]){
+    alert('امسح باركود الصنف أو اختره من قائمة الأصناف أولاً.');
+    return;
+  }
+  const raw=document.getElementById('actualQty').value.trim();
+  if(raw==='' || !Number.isFinite(Number(raw)) || Number(raw)<0){
+    alert('أدخل كمية فعلية صحيحة (صفر أو أكثر).');
+    return;
+  }
+  stock[selectedCountIndex].actualQty=Number(raw);
+  stock[selectedCountIndex].countedAt=new Date().toLocaleString('ar');
+  save();
+  renderCountSelection();
+  alert('تم حفظ الكمية الفعلية دون تغيير كمية المخزون المسجلة.');
 }
 
-// استيراد Excel
+// إنشاء ملف Excel ومشاركته/تنزيله على الهاتف
+async function exportExcel(){
+  if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة.');return;}
+  if(!stock.length){alert('لا توجد أصناف لتصديرها.');return;}
+  try{
+    const data=stock.map(x=>({
+      'الباركود':x.barcode||'',
+      'اسم الصنف':x.name||'',
+      'الكمية المسجلة':Number(x.qty)||0,
+      'الكمية الفعلية':x.actualQty===undefined?'':Number(x.actualQty),
+      'الفرق':x.actualQty===undefined?'':Number(x.actualQty)-(Number(x.qty)||0),
+      'تاريخ الجرد':x.countedAt||'',
+      'سعر الشراء':Number(x.price)||0
+    }));
+    const ws=XLSX.utils.json_to_sheet(data);
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'المخزون والجرد');
+    const array=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    const blob=new Blob([array],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const file=new File([blob],'مخزون_وجرد_الربيعي_ماركت.xlsx',{type:blob.type});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      await navigator.share({files:[file],title:'مخزون وجرد الربيعي ماركت',text:'ملف بيانات المخزون والجرد'});
+      alert('تم تجهيز ملف Excel للمشاركة أو الحفظ.');
+      return;
+    }
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='مخزون_وجرد_الربيعي_ماركت.xlsx';
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+    alert('تم إنشاء ملف Excel. إذا لم يظهر التنزيل، أخبرني وسنضيف الحفظ عبر مكوّن Android الأصلي.');
+  }catch(error){
+    if(error && error.name==='AbortError')return;
+    alert('تعذر تصدير Excel: '+(error.message||error));
+  }
+}
+
 function importExcel(event){
-  const file = event.target.files[0];
-  if(!file) return;
-
-  if(typeof XLSX === 'undefined'){
-    alert('مكتبة Excel غير جاهزة');
-    return;
-  }
-
-  const reader = new FileReader();
-
-  reader.onload = function(e){
+  const file=event.target.files[0];if(!file)return;
+  if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة');return;}
+  const reader=new FileReader();
+  reader.onload=function(e){
     try{
-      const wb = XLSX.read(e.target.result,{type:'array'});
-
-      const rows = XLSX.utils.sheet_to_json(
-        wb.Sheets[wb.SheetNames[0]],
-        {defval:''}
-      );
-
-      if(!rows.length){
-        alert('ملف Excel فارغ');
-        return;
-      }
-
-      const normalize = s =>
-        String(s).replace(/\s/g,'').toLowerCase();
-
+      const wb=XLSX.read(e.target.result,{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+      if(!rows.length){alert('ملف Excel فارغ');return;}
+      const normalize=s=>String(s).replace(/\s/g,'').toLowerCase();
       let added=0,updated=0,skipped=0;
-
       rows.forEach(row=>{
         const keys=Object.keys(row);
-
-        const find=names=>{
-          const key=keys.find(k=>names.includes(normalize(k)));
-          return key ? row[key] : '';
-        };
-
+        const find=names=>{const key=keys.find(k=>names.includes(normalize(k)));return key?row[key]:'';};
         const name=String(find(['الصنف','اسمالصنف','name'])).trim();
-
-        const barcode=String(
-          find(['رقمالباركود','الباركود','barcode'])
-        ).trim();
-
-        const qty=Number(find(['العدد','الكمية','qty'])) || 0;
-
-        const price=Number(
-          find(['سعرالشراء','سعرالشراءللوحدة','price'])
-        ) || 0;
-
-        if(!name) return;
-
-        const existing=barcode
-          ? stock.find(x=>String(x.barcode || '')===barcode)
-          : null;
-
+        const barcode=String(find(['رقمالباركود','الباركود','barcode'])).trim();
+        const qty=Number(find(['العدد','الكمية','الكميه','qty']))||0;
+        const price=Number(find(['سعرالشراء','سعرالشراءللوحدة','price']))||0;
+        if(!name)return;
+        const existing=barcode?stock.find(x=>String(x.barcode||'')===barcode):null;
         const item={name,barcode,qty,price};
-
         if(existing){
-          if(confirm(
-            'الصنف موجود مسبقاً: '+name+
-            '\nالباركود: '+barcode+
-            '\nهل تريد استبدال بياناته؟'
-          )){
-            Object.assign(existing,item);
-            updated++;
-          }else{
-            skipped++;
-          }
-        }else{
-          stock.push(item);
-          added++;
-        }
+          if(confirm('الصنف موجود مسبقاً: '+name+'\nالباركود: '+barcode+'\nهل تريد استبدال بياناته؟')){
+            // لا نمسح نتيجة الجرد السابقة عند تحديث بيانات الصنف
+            Object.assign(existing,item);updated++;
+          }else skipped++;
+        }else{stock.push(item);added++;}
       });
-
       save();
-
-      alert(
-        'اكتمل الاستيراد\n'+
-        'أصناف جديدة: '+added+
-        '\nتم تحديثها: '+updated+
-        '\nتم تجاهلها: '+skipped
-      );
-
-    }catch(error){
-      alert('تعذر قراءة الملف: '+error.message);
-    }
+      alert('اكتمل الاستيراد\nأصناف جديدة: '+added+'\nتم تحديثها: '+updated+'\nتم تجاهلها: '+skipped);
+    }catch(error){alert('تعذر قراءة الملف: '+error.message);}
   };
-
-  reader.readAsArrayBuffer(file);
-  event.target.value='';
+  reader.readAsArrayBuffer(file);event.target.value='';
 }
-
-// النسخة الاحتياطية
 function backupData(){
-  const blob=new Blob(
-    [JSON.stringify(stock,null,2)],
-    {type:'application/json'}
-  );
-
+  const blob=new Blob([JSON.stringify(stock,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-
-  a.href=url;
-  a.download='نسخة_احتياطية_الربيعي.json';
-  a.click();
-
-  URL.revokeObjectURL(url);
+  const a=document.createElement('a');a.href=url;a.download='نسخة_احتياطية_الربيعي.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-
-// استعادة النسخة الاحتياطية
 function restoreBackup(event){
-  const file=event.target.files[0];
-  if(!file) return;
-
+  const file=event.target.files[0];if(!file)return;
   const reader=new FileReader();
-
   reader.onload=function(e){
     try{
       const data=JSON.parse(e.target.result);
-
-      if(!Array.isArray(data) ||
-         !data.every(x=>x && typeof x.name==='string')){
-        alert('ملف النسخة الاحتياطية غير صالح');
-        return;
-      }
-
+      if(!Array.isArray(data)||!data.every(x=>x&&typeof x.name==='string')){alert('ملف النسخة الاحتياطية غير صالح');return;}
       if(confirm('سيتم استبدال بيانات المخزون الحالية. هل تريد المتابعة؟')){
-        stock=data.map(x=>({
-          name:x.name,
-          barcode:String(x.barcode || ''),
-          qty:Number(x.qty) || 0,
-          price:Number(x.price) || 0
-        }));
-
-        save();
-        alert('تمت استعادة البيانات بنجاح');
+        stock=data.map(x=>({...x,name:x.name,barcode:String(x.barcode||''),qty:Number(x.qty)||0,price:Number(x.price)||0}));
+        save();selectedCountIndex=-1;renderCountSelection();alert('تمت استعادة البيانات بنجاح');
       }
-
-    }catch(error){
-      alert('تعذر استعادة النسخة الاحتياطية');
-    }
+    }catch(error){alert('تعذر استعادة النسخة الاحتياطية');}
   };
-
-  reader.readAsText(file);
-  event.target.value='';
+  reader.readAsText(file);event.target.value='';
 }
-
-// تشغيل التطبيق
 showItems();
 updateSavedTime();
-
-// تشغيل Service Worker
+renderCountSelection();
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('./sw.js')
-      .catch(error=>console.error('SW error:',error));
-  });
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(error=>console.error('SW error:',error)));
 }
 </script>
-
-<!-- قارئ الباركود الأصلي -->
 <script src="./scanner.js"></script>
-
 </body>
 </html>
