@@ -117,12 +117,13 @@ function showItems(){
     const index=stock.indexOf(x);
     const hasActual=x.actualQty!==undefined && x.actualQty!==null && x.actualQty!=='';
     const diff=hasActual?Number(x.actualQty)-Number(x.qty||0):null;
+    const diffLabel=!hasActual?'لم يتم الجرد':diff>0?'وفر: '+diff:diff<0?'عجز: '+Math.abs(diff):'متطابق';
     return `<div class="item">
       <b>${escapeHTML(x.name)}</b><br>
       الباركود: ${escapeHTML(x.barcode||'-')}<br>
       كمية النظام: ${Number(x.qty)||0}<br>
       سعر الشراء: ${Number(x.price)||0}<br>
-      ${hasActual?`الكمية الفعلية: ${Number(x.actualQty)||0}<br>الفرق: <span class="${diff===0?'good':diff>0?'good':'bad'}">${diff>0?'+':''}${diff}</span><br><span class="muted">آخر جرد: ${escapeHTML(x.countedAt||'-')}</span><br>`:'لم يتم جرده بعد<br>'}
+      ${hasActual?`الكمية الفعلية: ${Number(x.actualQty)||0}<br>الفرق: <span>${diffLabel}</span><br><span class="muted">آخر جرد: ${escapeHTML(x.countedAt||'-')}</span><br>`:'لم يتم جرده بعد<br>'}
       <button class="small" onclick="selectItemForCount(${index})">تسجيل / تعديل الجرد</button>
       <button class="small" onclick="delItem(${index})">حذف</button>
     </div>`;
@@ -149,7 +150,7 @@ function renderCountSelection(){
   }
   const x=stock[selectedCountIndex];
   const actual=x.actualQty===undefined?'لم يسجل بعد':Number(x.actualQty);
-  const diff=x.actualQty===undefined?'—':Number(x.actualQty)-Number(x.qty||0);
+  const diff=x.actualQty===undefined?'لم يتم الجرد':Number(x.actualQty)>Number(x.qty||0)?'وفر: '+(Number(x.actualQty)-Number(x.qty||0)):Number(x.actualQty)<Number(x.qty||0)?'عجز: '+(Number(x.qty||0)-Number(x.actualQty)):'متطابق';
   box.innerHTML=`<b>${escapeHTML(x.name)}</b><br>الباركود: ${escapeHTML(x.barcode||'-')}<br>كمية النظام: ${Number(x.qty)||0}<br>الكمية الفعلية المحفوظة: ${actual}<br>الفرق: ${diff}`;
 }
 function handleScannedBarcode(value){
@@ -208,25 +209,22 @@ function findHeaderIndex(headers, aliases){
   return normalized.findIndex(h=>aliases.includes(h));
 }
 
-// التصدير: ملف Excel بخمسة أعمدة، مع الحفظ/المشاركة الأصلية على أندرويد.
+// التصدير: اسم الصنف، الكمية الفعلية، سعر الشراء.
 async function exportExcel(){
   if(typeof XLSX==='undefined'){alert('مكتبة Excel غير جاهزة.');return;}
   if(!stock.length){alert('لا توجد أصناف لتصديرها.');return;}
   try{
-    const rows=[['اسم الصنف','كمية النظام','سعر الشراء','الفعلي','الفارق']];
+    const rows=[['اسم الصنف','الكمية الفعلية','سعر الشراء']];
     stock.forEach(x=>{
-      const hasActual=x.actualQty!==undefined && x.actualQty!==null && x.actualQty!=='';
-      const systemQty=Number(x.qty)||0;
-      const actual=hasActual?Number(x.actualQty):'';
-      const difference=hasActual?actual-systemQty:'';
-      rows.push([x.name||'',systemQty,Number(x.price)||0,actual,difference]);
+      const actual=x.actualQty!==undefined && x.actualQty!==null && x.actualQty!==''?Number(x.actualQty):'';
+      rows.push([x.name||'',actual,Number(x.price)||0]);
     });
     const ws=XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:28},{wch:16},{wch:16},{wch:14},{wch:14}];
+    ws['!cols']=[{wch:30},{wch:18},{wch:18}];
     const wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'المخزون والجرد');
+    XLSX.utils.book_append_sheet(wb,ws,'الجرد الفعلي');
     const base64=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
-    const fileName='مخزون_وجرد_الربيعي_ماركت.xlsx';
+    const fileName='جرد_الربيعي_ماركت.xlsx';
     if(window.NativeFiles && typeof window.NativeFiles.saveAndShare==='function'){
       await window.NativeFiles.saveAndShare(fileName,base64,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       alert('تم تجهيز ملف Excel. اختر «حفظ في الملفات» أو تطبيقاً مناسباً من قائمة المشاركة.');
@@ -241,15 +239,21 @@ async function exportExcel(){
     a.href=url;a.download=fileName;a.style.display='none';
     document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),30000);
-    alert('تم إنشاء ملف Excel. إذا لم يظهر خيار الحفظ، تأكد من بناء APK بعد تثبيت ملفات التحديث.');
+    alert('تم إنشاء ملف Excel.');
   }catch(error){
     if(error && error.name==='AbortError')return;
     alert('تعذر تصدير Excel: '+(error.message||error));
   }
 }
 
-// الاستيراد: اسم الصنف، رمز الباركود، كمية النظام، سعر الشراء.
-// إذا كان الباركود موجوداً يتم تحديث الصنف نفسه مع الحفاظ على بيانات الجرد الفعلي.
+// الاستيراد: اسم الصنف، كمية النظام، سعر الشراء، سعر البيع.
+// المطابقة باسم الصنف بعد توحيد المسافات والتشكيل لمنع إنشاء أصناف مكررة.
+function normalizeItemName(value){
+  return String(value??'').normalize('NFKC')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g,'')
+    .replace(/[\u200e\u200f]/g,'')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
 function importExcel(event){
   const file=event.target.files && event.target.files[0];
   if(!file)return;
@@ -259,42 +263,38 @@ function importExcel(event){
     try{
       const wb=XLSX.read(e.target.result,{type:'array'});
       const sheet=wb.Sheets[wb.SheetNames[0]];
-      // raw:false يساعد على قراءة الباركود كما يظهر في Excel، بما في ذلك الأصفار المنسقة.
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false});
       if(!matrix.length){alert('ملف Excel فارغ');return;}
       const headers=matrix[0];
       const nameIndex=findHeaderIndex(headers,['اسمالصنف','الصنف','اسم','name','itemname']);
-      const barcodeIndex=findHeaderIndex(headers,['رمزالباركود','الباركود','باركود','رقمالباركود','barcode','barcodeid']);
       const qtyIndex=findHeaderIndex(headers,['كميةالنظام','الكميهالنظام','الكميةالمسجلة','الكميهالمسجله','الكمية','الكميه','العدد','qty','quantity','systemqty']);
       const priceIndex=findHeaderIndex(headers,['سعرالشراء','سعرالشراءللوحدة','سعرشراء','price','purchaseprice']);
-      if(nameIndex<0 || barcodeIndex<0 || qtyIndex<0 || priceIndex<0){
-        alert('عناوين الأعمدة غير مطابقة. يجب أن يحتوي الصف الأول على: اسم الصنف، رمز الباركود، كمية النظام، سعر الشراء.');
+      const salePriceIndex=findHeaderIndex(headers,['سعرالبيع','سعرالبيعللوحدة','saleprice','sellingprice']);
+      if(nameIndex<0||qtyIndex<0||priceIndex<0||salePriceIndex<0){
+        alert('عناوين الأعمدة المطلوبة: اسم الصنف، كمية النظام، سعر الشراء، سعر البيع.');
         return;
       }
       let added=0,updated=0,skipped=0;
       for(let i=1;i<matrix.length;i++){
-        const row=matrix[i];
-        const name=String(row[nameIndex]??'').trim();
-        const barcode=String(row[barcodeIndex]??'').trim();
-        if(!name || !barcode){skipped++;continue;}
+        const row=matrix[i], name=String(row[nameIndex]??'').trim();
+        if(!name){skipped++;continue;}
         const qty=parseExcelNumber(row[qtyIndex]);
         const price=parseExcelNumber(row[priceIndex]);
-        if(!Number.isFinite(qty)||qty<0||!Number.isFinite(price)||price<0){skipped++;continue;}
-        const existingIndex=stock.findIndex(x=>String(x.barcode||'').trim()===barcode);
+        const salePrice=parseExcelNumber(row[salePriceIndex]);
+        if(!Number.isFinite(qty)||qty<0||!Number.isFinite(price)||price<0||!Number.isFinite(salePrice)||salePrice<0){skipped++;continue;}
+        const key=normalizeItemName(name);
+        const existingIndex=stock.findIndex(x=>normalizeItemName(x.name)===key);
         if(existingIndex>=0){
-          // لا نغيّر actualQty أو countedAt حتى لا نفقد نتيجة الجرد السابقة.
-          stock[existingIndex].name=name;
-          stock[existingIndex].barcode=barcode;
           stock[existingIndex].qty=qty;
           stock[existingIndex].price=price;
           updated++;
         }else{
-          stock.push({barcode,name,qty,price});
+          stock.push({barcode:'',name,qty,price,salePrice});
           added++;
         }
       }
       save();
-      alert('اكتمل الاستيراد بنجاح\nأصناف جديدة: '+added+'\nأصناف تم تحديثها حسب الباركود: '+updated+'\nصفوف متجاهلة أو غير صالحة: '+skipped);
+      alert('اكتمل الاستيراد\nأصناف جديدة: '+added+'\nأصناف تم تحديث كمية النظام وسعر الشراء لها: '+updated+'\nصفوف متجاهلة: '+skipped);
     }catch(error){alert('تعذر قراءة الملف: '+(error.message||error));}
     finally{event.target.value='';}
   };
