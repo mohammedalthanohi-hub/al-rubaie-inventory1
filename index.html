@@ -225,9 +225,10 @@ async function exportExcel(){
     XLSX.utils.book_append_sheet(wb,ws,'الجرد الفعلي');
     const base64=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
     const fileName='جرد_الربيعي_ماركت.xlsx';
-    if(window.NativeFiles && typeof window.NativeFiles.saveAndShare==='function'){
-      await window.NativeFiles.saveAndShare(fileName,base64,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      alert('تم تجهيز ملف Excel. اختر «حفظ في الملفات» أو تطبيقاً مناسباً من قائمة المشاركة.');
+    if(window.NativeFiles && typeof window.NativeFiles.saveFile==='function'){
+      const saved=await window.NativeFiles.saveFile(fileName,base64,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if(saved && saved.cancelled)return;
+      alert('تم حفظ ملف Excel في مجلد Downloads داخل مجلد Al-Rubaie Market.');
       return;
     }
     const binary=atob(base64);
@@ -316,11 +317,13 @@ function importExcel(event){
 async function backupData(){
   const json=JSON.stringify(stock,null,2);
   const base64=btoa(unescape(encodeURIComponent(json)));
-  const fileName='نسخة_احتياطية_الربيعي.json';
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  const fileName='نسخة_احتياطية_الربيعي_'+stamp+'.json';
   try{
-    if(window.NativeFiles && typeof window.NativeFiles.saveAndShare==='function'){
-      await window.NativeFiles.saveAndShare(fileName,base64,'application/json');
-      alert('تم تجهيز النسخة الاحتياطية. اختر مكان حفظها من قائمة المشاركة.');
+    if(window.NativeFiles && typeof window.NativeFiles.saveFile==='function'){
+      const saved=await window.NativeFiles.saveFile(fileName,base64,'application/json');
+      if(saved && saved.cancelled)return;
+      alert('تم حفظ النسخة الاحتياطية في مجلد Downloads داخل مجلد Al-Rubaie Market. يمكنك العثور عليها من تطبيق «ملفاتي».');
       return;
     }
   }catch(error){if(error && error.name==='AbortError')return;alert('تعذر حفظ النسخة الاحتياطية: '+(error.message||error));return;}
