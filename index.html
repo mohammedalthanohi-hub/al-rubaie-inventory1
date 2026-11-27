@@ -246,13 +246,15 @@ async function exportExcel(){
   }
 }
 
-// الاستيراد: اسم الصنف، كمية النظام، سعر الشراء، سعر البيع.
-// المطابقة باسم الصنف بعد توحيد المسافات والتشكيل لمنع إنشاء أصناف مكررة.
+// الاستيراد: اسم الصنف، الباركود، كمية النظام، سعر الشراء، سعر البيع.
 function normalizeItemName(value){
   return String(value??'').normalize('NFKC')
     .replace(/[\u064B-\u065F\u0670\u0640]/g,'')
     .replace(/[\u200e\u200f]/g,'')
     .replace(/\s+/g,' ').trim().toLowerCase();
+}
+function normalizeBarcode(value){
+  return String(value??'').trim().replace(/\s+/g,'');
 }
 function importExcel(event){
   const file=event.target.files && event.target.files[0];
@@ -261,40 +263,50 @@ function importExcel(event){
   const reader=new FileReader();
   reader.onload=function(e){
     try{
-      const wb=XLSX.read(e.target.result,{type:'array'});
+      const wb=XLSX.read(e.target.result,{type:'array',cellText:true,cellDates:false});
       const sheet=wb.Sheets[wb.SheetNames[0]];
       const matrix=XLSX.utils.sheet_to_json(sheet,{header:1,defval:'',raw:false});
       if(!matrix.length){alert('ملف Excel فارغ');return;}
       const headers=matrix[0];
       const nameIndex=findHeaderIndex(headers,['اسمالصنف','الصنف','اسم','name','itemname']);
+      const barcodeIndex=findHeaderIndex(headers,['رمزالباركود','الباركود','باركود','barcode','barcodeno']);
       const qtyIndex=findHeaderIndex(headers,['كميةالنظام','الكميهالنظام','الكميةالمسجلة','الكميهالمسجله','الكمية','الكميه','العدد','qty','quantity','systemqty']);
       const priceIndex=findHeaderIndex(headers,['سعرالشراء','سعرالشراءللوحدة','سعرشراء','price','purchaseprice']);
       const salePriceIndex=findHeaderIndex(headers,['سعرالبيع','سعرالبيعللوحدة','saleprice','sellingprice']);
-      if(nameIndex<0||qtyIndex<0||priceIndex<0||salePriceIndex<0){
-        alert('عناوين الأعمدة المطلوبة: اسم الصنف، كمية النظام، سعر الشراء، سعر البيع.');
+      if(nameIndex<0||barcodeIndex<0||qtyIndex<0||priceIndex<0||salePriceIndex<0){
+        alert('عناوين الأعمدة المطلوبة بالترتيب: اسم الصنف، رمز الباركود، كمية النظام، سعر الشراء، سعر البيع.');
         return;
       }
-      let added=0,updated=0,skipped=0;
+      let added=0,updated=0,skipped=0,barcodeConflicts=0;
       for(let i=1;i<matrix.length;i++){
         const row=matrix[i], name=String(row[nameIndex]??'').trim();
+        const barcode=normalizeBarcode(row[barcodeIndex]);
         if(!name){skipped++;continue;}
         const qty=parseExcelNumber(row[qtyIndex]);
         const price=parseExcelNumber(row[priceIndex]);
         const salePrice=parseExcelNumber(row[salePriceIndex]);
         if(!Number.isFinite(qty)||qty<0||!Number.isFinite(price)||price<0||!Number.isFinite(salePrice)||salePrice<0){skipped++;continue;}
         const key=normalizeItemName(name);
-        const existingIndex=stock.findIndex(x=>normalizeItemName(x.name)===key);
+        let existingIndex=-1;
+        if(barcode) existingIndex=stock.findIndex(x=>normalizeBarcode(x.barcode)===barcode);
+        if(existingIndex<0) existingIndex=stock.findIndex(x=>normalizeItemName(x.name)===key);
         if(existingIndex>=0){
+          const otherBarcodeIndex=barcode?stock.findIndex((x,index)=>index!==existingIndex&&normalizeBarcode(x.barcode)===barcode):-1;
+          if(otherBarcodeIndex>=0){barcodeConflicts++;skipped++;continue;}
           stock[existingIndex].qty=qty;
           stock[existingIndex].price=price;
+          // لا نستبدل باركوداً موجوداً؛ نضيف باركود الملف فقط إذا كان الصنف بلا باركود.
+          if(barcode&&!normalizeBarcode(stock[existingIndex].barcode)) stock[existingIndex].barcode=barcode;
           updated++;
         }else{
-          stock.push({barcode:'',name,qty,price,salePrice});
+          const duplicateBarcode=barcode?stock.some(x=>normalizeBarcode(x.barcode)===barcode):false;
+          if(duplicateBarcode){barcodeConflicts++;skipped++;continue;}
+          stock.push({barcode,name,qty,price,salePrice});
           added++;
         }
       }
       save();
-      alert('اكتمل الاستيراد\nأصناف جديدة: '+added+'\nأصناف تم تحديث كمية النظام وسعر الشراء لها: '+updated+'\nصفوف متجاهلة: '+skipped);
+      alert('اكتمل الاستيراد\nأصناف جديدة: '+added+'\nأصناف تم تحديث كمية النظام وسعر الشراء لها: '+updated+'\nصفوف متجاهلة: '+skipped+'\nتعارضات باركود: '+barcodeConflicts);
     }catch(error){alert('تعذر قراءة الملف: '+(error.message||error));}
     finally{event.target.value='';}
   };
